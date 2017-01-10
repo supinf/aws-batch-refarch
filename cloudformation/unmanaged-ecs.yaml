@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "AWS Batch refarch - Unmanaged ECS cluster"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: VPC Configuration
+        Parameters:
+          - Subnet1
+          - Subnet2
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - InstanceType
+          - InstanceProfile
+          - KeyName
+          - SecurityGroup
+      - Label:
+          default: ECS Configuration
+        Parameters:
+          - ECSCluster
+
+Parameters:
+  ECSCluster:
+    Description: Name of the ECS cluster
+    Type: String
+
+  InstanceType:
+    Description: Which instance type should we use to build the ECS cluster?
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - m4.large
+      - m3.medium
+      - m3.large
+      - c4.large
+      - c3.large
+
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+
+  Subnet1:
+    Description: Choose a subnet to which this ECS cluster should be deployed
+    Type: AWS::EC2::Subnet::Id
+
+  Subnet2:
+    Description: Choose a subnet to which this ECS cluster should be deployed
+    Type: AWS::EC2::Subnet::Id
+
+  SecurityGroup:
+    Description: Select the Security Group for ECS container instances.
+    Type: AWS::EC2::SecurityGroup::Id
+
+  InstanceProfile:
+    Description: An IAM InstanceProfile for ECS container instances.
+    Type: String
+
+Mappings:
+  AWSRegionToAMI:
+    us-east-1:
+      AMI: ami-fbacaaec
+    us-east-2:
+      AMI: ami-fbb4ee9e
+    us-west-1:
+      AMI: ami-4bc6912b
+    us-west-2:
+      AMI: ami-f9c16a99
+    eu-west-1:
+      AMI: ami-1c59036f
+    eu-central-1:
+      AMI: ami-e21ddb8d
+    ap-northeast-1:
+      AMI: ami-e0d0b287
+    ap-southeast-1:
+      AMI: ami-1f9b377c
+    ap-southeast-2:
+      AMI: ami-114d7572
+
+Resources:
+  ECSAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        WaitOnResourceSignals: true
+      AutoScalingReplacingUpdate:
+        WillReplace: true
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref Subnet1
+        - !Ref Subnet2
+      LaunchConfigurationName:
+        Ref: ECSLaunchConfiguration
+      DesiredCapacity: 1
+      MaxSize: 1
+      MinSize: 1
+      MetricsCollection:
+        - Granularity: 1Minute
+      HealthCheckGracePeriod: 120
+      Tags:
+        - Key: Name
+          Value: !Ref AWS::StackName
+          PropagateAtLaunch: true
+
+  ECSLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !FindInMap [AWSRegionToAMI, !Ref "AWS::Region", AMI]
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      KeyName: !Ref KeyName
+      AssociatePublicIpAddress: true
+      UserData:
+        "Fn::Base64": !Sub |
+            #!/bin/bash
+            yum install -y aws-cfn-bootstrap
+            /opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSLaunchConfiguration
+            /opt/aws/bin/cfn-signal -e $? --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSAutoScalingGroup
+      SecurityGroups:
+        - !Ref SecurityGroup
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          files:
+            "/etc/ecs/ecs.config":
+              mode: 000400
+              owner: root
+              group: root
+              content: !Sub |
+                  ECS_CLUSTER=${ECSCluster}
+                  ECS_AVAILABLE_LOGGING_DRIVERS=["json-file","awslogs"]
+                  ECS_DISABLE_IMAGE_CLEANUP=false
+                  ECS_ENGINE_TASK_CLEANUP_WAIT_DURATION=5m
+                  ECS_IMAGE_CLEANUP_INTERVAL=10m
+                  ECS_IMAGE_MINIMUM_CLEANUP_AGE=15m
+                  ECS_NUM_IMAGES_DELETE_PER_CYCLE=5
+
+            "/etc/cfn/cfn-hup.conf":
+              mode: 000400
+              owner: root
+              group: root
+              content: !Sub |
+                  [main]
+                  stack=${AWS::StackId}
+                  region=${AWS::Region}
+
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                  [cfn-auto-reloader-hook]
+                  triggers=post.update
+                  path=Resources.ContainerInstances.Metadata.AWS::CloudFormation::Init
+                  action=/opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSLaunchConfiguration
+
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
