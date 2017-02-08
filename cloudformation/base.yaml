@@ -46,6 +46,7 @@ Resources:
     DependsOn: AttachGateway
     Properties:
       VpcId: !Ref VPC
+      MapPublicIpOnLaunch: true
       AvailabilityZone:
         Fn::Select:
           - 0
@@ -66,6 +67,7 @@ Resources:
     DependsOn: AttachGateway
     Properties:
       VpcId: !Ref VPC
+      MapPublicIpOnLaunch: true
       AvailabilityZone:
         Fn::Select:
           - 1
