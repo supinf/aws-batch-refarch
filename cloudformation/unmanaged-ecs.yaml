@@ -64,27 +64,27 @@ Parameters:
 Mappings:
   AWSRegionToAMI:
     us-east-1:
-      AMI: ami-a58760b3
+      AMI: ami-b2df2ca4
     us-east-2:
-      AMI: ami-a6e4bec3
+      AMI: ami-832b0ee6
     us-west-1:
-      AMI: ami-74cb9b14
+      AMI: ami-dd104dbd
     us-west-2:
-      AMI: ami-5b6dde3b
+      AMI: ami-022b9262
     eu-west-1:
-      AMI: ami-e3fbd290
+      AMI: ami-a7f2acc1
     eu-west-2:
-      AMI: ami-77f6fc13
+      AMI: ami-3fb6bc5b
     eu-central-1:
-      AMI: ami-38dc1157
+      AMI: ami-ec2be583
     ap-northeast-1:
-      AMI: ami-30bdce57
+      AMI: ami-c393d6a4
     ap-southeast-1:
-      AMI: ami-9f75ddfc
+      AMI: ami-a88530cb
     ap-southeast-2:
-      AMI: ami-cf393cac
+      AMI: ami-8af8ffe9
     ca-central-1:
-      AMI: ami-1b01b37f
+      AMI: ami-ead5688e
 
 Resources:
   ECSAutoScalingGroup:
