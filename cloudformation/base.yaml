@@ -196,9 +196,19 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Policies:
+        - PolicyName: batch-job-policy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource:
+                  - Fn::Join: ['', ['arn:aws:s3:::', {Ref: S3Bucket}, '/*' ]]
       Path: /
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
 
 Outputs:
     VPC:
@@ -244,3 +254,7 @@ Outputs:
     SecurityGroup:
         Description: A security group for Batch instances
         Value: !Ref SecurityGroup
+
+    S3Bucket:
+        Description: A S3 bucket
+        Value: !Ref S3Bucket
