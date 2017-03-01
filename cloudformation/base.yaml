@@ -186,6 +186,9 @@ Resources:
         - !Ref BatchInstanceRole
       Path: /
 
+  S3Bucket:
+    Type: AWS::S3::Bucket
+
   BatchJobRole:
     Type: AWS::IAM::Role
     Properties:
@@ -207,9 +210,6 @@ Resources:
                   - Fn::Join: ['', ['arn:aws:s3:::', {Ref: S3Bucket}, '/*' ]]
       Path: /
 
-  S3Bucket:
-    Type: AWS::S3::Bucket
-
 Outputs:
     VPC:
         Description: A VPC for AWS Batch
@@ -225,36 +225,24 @@ Outputs:
 
     AWSBatchServiceRole:
         Description: A service role for AWS Batch to access other resources
-        Value:
-          Fn::GetAtt:
-            - AWSBatchServiceRole
-            - Arn
+        Value: !GetAtt AWSBatchServiceRole.Arn
 
     AmazonEC2SpotFleetRole:
         Description: A service role for EC2 SpotFleet to access ec2 resources
-        Value:
-          Fn::GetAtt:
-            - AmazonEC2SpotFleetRole
-            - Arn
+        Value: !GetAtt AmazonEC2SpotFleetRole.Arn
 
     BatchInstanceProfile:
         Description: A instance profile for Batch instances
-        Value:
-          Fn::GetAtt:
-            - BatchInstanceProfile
-            - Arn
-
-    BatchJobRole:
-        Description: A task role for Batch jobs
-        Value:
-          Fn::GetAtt:
-            - BatchJobRole
-            - Arn
+        Value: !GetAtt BatchInstanceProfile.Arn
 
     SecurityGroup:
         Description: A security group for Batch instances
         Value: !Ref SecurityGroup
 
     S3Bucket:
-        Description: A S3 bucket
+        Description: A S3 bucket for job results
         Value: !Ref S3Bucket
+
+    BatchJobRole:
+        Description: A task role for Batch jobs
+        Value: !GetAtt BatchJobRole.Arn

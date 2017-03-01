@@ -1,0 +1,159 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "AWS Batch refarch - Job executor"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Job Configuration
+        Parameters:
+          - JobName
+          - JobQueueName
+          - JobDefinitionArn
+      # - Label:
+      #     default: Alarm Configuration
+      #   Parameters:
+      #     - AlarmEmail
+
+Parameters:
+  JobName:
+    Description: A job name of AWS Batch.
+    Type: String
+
+  JobQueueName:
+    Description: A job queue of AWS Batch.
+    Type: String
+
+  JobDefinitionArn:
+    Description: The ARN of a job definition to be triggered.
+    Type: String
+
+  # AlarmEmail:
+  #   Description: E-mail address for error alarm.
+  #   Type: String
+
+Resources:
+  BatchJobTriggerFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: batch-job-trigger-policy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - batch:SubmitJob
+                Resource: "*"
+      Path: "/"
+
+  BatchJobTrigger:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: BatchJobTriggerResource
+      Description: Starts a job of AWS Batch.
+      Role: !GetAtt BatchJobTriggerFunctionRole.Arn
+      Handler: index.lambda_handler
+      Runtime: python2.7
+      MemorySize: 128
+      Timeout: 30
+      Environment:
+        Variables:
+          JOB_NAME: !Ref JobName
+          JOB_QUEUE_NAME: !Ref JobQueueName
+          JOB_DEFINITION_ARN: !Ref JobDefinitionArn
+      Code:
+        ZipFile: |
+          from __future__ import print_function
+          from datetime import datetime as dt
+          import random
+          import json
+          import os
+          import boto3
+
+          batch = boto3.client('batch')
+
+          def lambda_handler(event, context):
+              target = "".join([random.choice('1234567890abcdefg') for x in xrange(10)])
+              try:
+                  response = batch.submit_job(
+                      jobName=os.environ['JOB_NAME'],
+                      jobQueue=os.environ['JOB_QUEUE_NAME'],
+                      jobDefinition=os.environ['JOB_DEFINITION_ARN'],
+                      parameters={
+                          'Arg1': dt.now().strftime('%H:%M:%S'),
+                          'Arg2': 'from-AWS-Lambda'
+                      },
+                      containerOverrides={
+                          'environment': [
+                              {'name': 'APP_TARGET', 'value': target}
+                          ]
+                      }
+                  )
+                  print(response)
+                  return response['jobId']
+              except Exception as e:
+                  print(e)
+                  raise e
+
+  BatchJobTriggerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: BatchJobTriggerRule
+      ScheduleExpression: rate(1 minute)
+      Targets:
+        - Id: BatchJobTrigger
+          Arn: !GetAtt BatchJobTrigger.Arn
+      State: DISABLED
+
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BatchJobTrigger
+      SourceArn: !GetAtt BatchJobTriggerRule.Arn
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+
+  # AlarmTopic:
+  #   Type: AWS::SNS::Topic
+  #   Properties:
+  #     Subscription:
+  #       - Protocol: email
+  #         Endpoint: !Ref AlarmEmail
+  # 
+  # BatchJobTriggerErrorAlarm:
+  #   Type: AWS::CloudWatch::Alarm
+  #   Properties:
+  #     AlarmName: LambdaApps/BatchJobTriggerError
+  #     AlarmActions:
+  #       - !Ref AlarmTopic
+  #     AlarmDescription: "Enters ALARM state if we have received a lamdba error"
+  #     Namespace: AWS/Lambda
+  #     MetricName: Errors
+  #     Dimensions:
+  #       - Name: FunctionName
+  #         Value: !Ref BatchJobTrigger
+  #     Period: 60
+  #     EvaluationPeriods: 1
+  #     Statistic: Sum
+  #     Threshold: 1
+  #     ComparisonOperator: GreaterThanOrEqualToThreshold
+  #     Unit: Count
+
+Outputs:
+  BatchJobEvent:
+    Description: CW Events rule for trigger the lambda
+    Value: !GetAtt BatchJobTriggerRule.Arn
